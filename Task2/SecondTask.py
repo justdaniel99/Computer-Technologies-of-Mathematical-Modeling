@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[14]:
-
-
 #Libraries
 import numpy as np
 import pyopencl as cl
@@ -42,7 +36,7 @@ def accelerationWithoutNumpy(body, masses, positions):
     return finalAcceleration
 
 
-# In[15]:
+# In[2]:
 
 
 # Just Pyhton usage
@@ -71,7 +65,7 @@ def verletAlgorythm(masses, initialPosition, initialVelocity, deltaTime, iterati
     return positions, velocities, times
 
 
-# In[16]:
+# In[3]:
 
 
 # odeint usage
@@ -100,11 +94,14 @@ def odeintVerletAlgorythm(masses, initialPosition, initialVelocity, deltaTime, i
     return positions, velocities, times
 
 
-# In[17]:
+# In[4]:
 
 
 # OpenCL usage
 def openCLVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations):
+    os.environ['PYOPENCL_CTX'] = '0'
+    os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
+    
     times = np.arange(iterations) * deltaTime
     
     ctx = cl.create_some_context()
@@ -143,11 +140,11 @@ def openCLVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, i
     
     prg = cl.Program(ctx,
                      """
-                     void acceleration(__global float *positions, __global float *openCLMasses, __global double *openCLAccelerations, __global double *openCLTemporaryArray, int bodiesNumber, int body, int time)
+                     void acceleration(__global float *positions, __global float *openCLMasses, __global float *openCLAccelerations, __global float *openCLTemporaryArray, int bodiesNumber, int body, int time)
                      {
-                         double gravitationConstant = 6.67408;
-                         double norm = 0.0;
-                         double distance = 0.0;
+                         float gravitationConstant = 6.67408;
+                         float norm = 0.0;
+                         float distance = 0.0;
                          int shift = time * 2;
                          
                          for (int d = 0; d < 2 * bodiesNumber; d++)
@@ -166,12 +163,12 @@ def openCLVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, i
                                     for (int d = 0; d < 2; d++)
                                     {
                                         distance = positions[shift + j*2 + d] - positions[shift + body*2 + d];
-                                        norm += pow(distance, 2);
+                                        norm += pown(distance, 2);
                                         openCLTemporaryArray[d] = gravitationConstant * openCLMasses[j] * distance;
                                         
                                     }
                                     
-                                    norm = pow(norm, 1.5);
+                                    norm = pow(norm, 1.5f);
                                     
                                     for (int d = 0; d < 2; d++)
                                     {
@@ -210,7 +207,7 @@ def openCLVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, i
                             {
                                 for (int d = 0; d < 2; d++)
                                 {
-                                    openCLPosition[(t+1)*shift + n*2 + d] = openCLPosition[t*shift + n*2 + d] + openCLVelocity[t*shift + n*2 + d] * deltaTime + 0.5 * openCLAccelerations[t*shift + n*2 + d] * deltaTime * deltaTime;
+                                    openCLPosition[(t+1)*shift + n*2 + d] = openCLPosition[t*shift + n*2 + d] + openCLVelocity[t*shift + n*2 + d] * deltaTime + 0.5 * openCLAccelerations[t*shift + n*2 + d] * pown(deltaTime,2);
                                 }
                             }
                             
@@ -239,101 +236,111 @@ def openCLVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, i
 
     prg.verletAlgorithm(queue, (1,), None, massesBuffer, initialPositionBuffer, initialVelocityBuffer, deltaTimeBuffer, iterationsBuffer, positionBuffer, velocityBuffer, bodiesNumberBuffer, accelerationsBuffer, temporaryArrayBuffer)
     
-    cl.enqueue_copy(queue, positionBuffer, openCLPosition)
-    cl.enqueue_copy(queue, velocityBuffer, openCLVelocity)
+    cl.enqueue_copy(queue, positionBuffer, openCLPosition).wait()
+    cl.enqueue_copy(queue, velocityBuffer, openCLVelocity).wait()
     
     return openCLPosition, openCLVelocity, times
 
 
-# In[18]:
-
-
 # Multiprocessing usage
 def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations): 
-    global verlet
-    
-    def verlet(queue, resultQueue, initialVelocity, sharedMemoryPositions, body, events1, events2):
-        
-        currentPosition = np.array(sharedMemoryPositions[body*2:(body+1)*2])
-        currentAcceleration = accelerationWithoutNumpy(body, masses, sharedMemoryPositions)
-
-        resultPosition = np.empty((iterations, 2))
-        resultVelocity = np.empty((iterations, 2))
-        
-        resultPosition[0, :] = currentPosition
-        resultVelocity[0, :] = initialVelocity[body*2:(body+1)*2]
-    
-        for j in range(iterations - 1):
-
-            resultPosition[j+1, :] = currentPosition + resultVelocity[j, :] * deltaTime + 0.5 * currentAcceleration * deltaTime**2
-
-            queue.put([body, resultPosition[j+1, :]])
-            
-            events1[body].set()
-
-            if body == 0:
-                for i in range(masses.size):
-                    events1[i].wait()
-                    events1[i].clear()
-                    
-                for i in range(masses.size):
-                    gettingFromQueue = queue.get()
-                    sharedMemoryPositions[gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[1]
-                    
-                for i in range(masses.size):
-                    events2[i].set()
-            else:
-                events2[body].wait()
-                events2[body].clear()
-
-            currentPosition = np.array(sharedMemoryPositions[body*2:(body + 1)*2])
-            
-            nextAcceleration = accelerationWithoutNumpy(body, masses, sharedMemoryPositions)
-
-            resultVelocity[j+1, :] = resultVelocity[j, :] + 0.5 * (currentAcceleration + nextAcceleration) * deltaTime
-            
-            currentAcceleration = nextAcceleration
-            
-        resultQueue.put([body, resultPosition, resultVelocity])
-
-    
     if __name__ == '__main__':
-        times = np.arange(iterations) * deltaTime
+        with mp.Pool(5) as pool:
+            pool.starmap(verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
+#     global verlet
+    
+#     def verlet(masses, initialPosition, initialVelocity, deltaTime, iterations):
+#         positions, velocities, times = verletAlgorythm(fucks, initialPosition, initialVelocity, deltaTime, iterations)
+#         return positions, velocities, times
+
+#     if __name__ == '__main__':
+#         pool = multiprocessing.Pool(masses.size)
+#         result = pool.map(verlet, ((masses, initialPosition, initialVelocity, deltaTime, iterations)))  
+    
+
+# Multiprocessing usage
+# def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations): 
+#     global verlet
+    
+#     def verlet(queue, resultQueue, initialVelocity, sharedMemoryPositions, body, events1, events2):
         
-        events1 = []
-        events2 = []
-        processes = []
+#         currentPosition = np.array(sharedMemoryPositions[body*2:(body+1)*2])
+#         currentAcceleration = accelerationWithoutNumpy(body, masses, sharedMemoryPositions)
+
+#         resultPosition = np.empty((iterations, 2))
+#         resultVelocity = np.empty((iterations, 2))
         
-        positions = np.zeros((times.size, 2*masses.size))
-        velocities = np.zeros((times.size, 2*masses.size))
+#         resultPosition[0, :] = currentPosition
+#         resultVelocity[0, :] = initialVelocity[body*2:(body+1)*2]
+    
+#         for j in range(iterations - 1):
+
+#             resultPosition[j+1, :] = currentPosition + resultVelocity[j, :] * deltaTime + 0.5 * currentAcceleration * deltaTime**2
+
+#             queue.put([body, resultPosition[j+1, :]])
+            
+#             events1[body].set()
+
+#             if body == 0:
+#                 for i in range(masses.size):
+#                     events1[i].wait()
+#                     events1[i].clear()
+                    
+#                 for i in range(masses.size):
+#                     gettingFromQueue = queue.get()
+#                     sharedMemoryPositions[gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[1]
+                    
+#                 for i in range(masses.size):
+#                     events2[i].set()
+#             else:
+#                 events2[body].wait()
+#                 events2[body].clear()
+
+#             currentPosition = np.array(sharedMemoryPositions[body*2:(body + 1)*2])
+            
+#             nextAcceleration = accelerationWithoutNumpy(body, masses, sharedMemoryPositions)
+
+#             resultVelocity[j+1, :] = resultVelocity[j, :] + 0.5 * (currentAcceleration + nextAcceleration) * deltaTime
+            
+#             currentAcceleration = nextAcceleration
+            
+#         resultQueue.put([body, resultPosition, resultVelocity])
+
+    
+#     if __name__ == '__main__':
+#         times = np.arange(iterations) * deltaTime
         
-        sharedMemoryPositions = mp.Array('d', initialPosition)
-
-        for body in masses:
-            events1.append(mp.Event())
-            events2.append(mp.Event())
-            events1[-1].clear()
-            events2[-1].clear()
-
-        queue = mp.Queue()
-        resultQueue = mp.Queue()
+#         events1 = []
+#         events2 = []
+#         processes = []
         
-        for body in range(masses.size):
-            processes.append(mp.Process(target=verlet, args=(queue, resultQueue, initialVelocity, sharedMemoryPositions, body, events1, events2)))
-            processes[-1].start()
+#         positions = np.zeros((times.size, 2*masses.size))
+#         velocities = np.zeros((times.size, 2*masses.size))
+        
+#         sharedMemoryPositions = mp.Array('d', initialPosition)
 
-        for i in range(masses.size):
-            gettingFromQueue = resultQueue.get()
-            positions[:, gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[1]
-            velocities[:, gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[2]
+#         for body in masses:
+#             events1.append(mp.Event())
+#             events2.append(mp.Event())
+#             events1[-1].clear()
+#             events2[-1].clear()
 
-        for process in processes:
-            process.join()
+#         queue = mp.Queue()
+#         resultQueue = mp.Queue()
+        
+#         for body in range(masses.size):
+#             processes.append(mp.Process(target=verlet, args=(queue, resultQueue, initialVelocity, sharedMemoryPositions, body, events1, events2)))
+#             processes[-1].start()
 
-        return positions, velocities, times
+#         for i in range(masses.size):
+#             gettingFromQueue = resultQueue.get()
+#             positions[:, gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[1]
+#             velocities[:, gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[2]
 
+#         for process in processes:
+#             process.join()
 
-# In[19]:
+#         return positions, velocities, times
 
 
 def VerletAlgorithmMethods(method, masses, initialPosition, initialVelocity, deltaTime, iterations):

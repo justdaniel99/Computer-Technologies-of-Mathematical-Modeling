@@ -1,53 +1,39 @@
 cimport cython
 cimport numpy as np
 import numpy as np
-from cython.parallel import prange, parallel
 from libc.math cimport sqrt, pow
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef double[:] acceleration(int body, double[:] masses, double[:] positions):
-    
+cdef np.ndarray[double, ndim=1] acceleration(int body, np.ndarray[double, ndim=1] masses, np.ndarray[double, ndim=1] positions):
     cdef:
         int bodiesNumber = masses.size
-        double gravitationConstant = 6.67408e-11
         double norm
-        double[:] resultAcceleration = np.zeros(positions.size)
-        double[:] temporaryArray = np.zeros(2)
-        double distance
-        int i, j, d
-
+        double gravitationConstant = 6.67408e-11
+        np.ndarray resultAcceleration = np.zeros(positions.size)
+        np.ndarray distance = np.zeros(2)
+        int j
 
     for j in range(bodiesNumber):
         if body != j:
+            distance = positions[j*2:(j+1)*2] - positions[body*2:(body+1)*2]
+            norm = pow(distance.dot(distance), 1.5)
+            resultAcceleration[j*2:(j+1)*2] += gravitationConstant * masses[j] * distance / norm
             
-            norm = 0
-            
-            for d in range(2):
-                distance = positions[j*2 + d] - positions[body*2 + d]
-                norm += distance * distance
-                temporaryArray[d] = gravitationConstant * masses[j] * distance
-                
-            norm = pow(norm, 1.5)
-            
-            for d in range(2):
-                resultAcceleration[body*2 + d] += temporaryArray[d] / norm
-    
     return resultAcceleration
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def cythonVerletAlgorithm(double[:] masses, double[:] initialPosition, double[:] initialVelocity, double deltaTime, int iterations):
-    
+def cythonVerletAlgorithm(np.ndarray[double, ndim=1] masses, np.ndarray[double, ndim=1] initialPosition, np.ndarray[double, ndim=1] initialVelocity, double deltaTime, int iterations):
     cdef:
-        double[:] times = np.arange(iterations) * deltaTime
-        double[:,:] position = np.empty((iterations, initialPosition.size))
-        double[:,:] velocity = np.empty((iterations, initialPosition.size))
-        double[:] currentAcceleration = np.zeros(initialPosition.size)
-        double[:] nextAcceleration = np.zeros(initialPosition.size)
-        int i, j, d, n
+        times = np.arange(iterations) * deltaTime
         int bodiesNumber = masses.size
+        np.ndarray[double, ndim=2] position = np.empty((iterations, initialPosition.size))
+        np.ndarray[double, ndim=2] velocity = np.empty((iterations, initialVelocity.size))
+        np.ndarray[double, ndim=1] currentAcceleration = np.empty(masses.size*2)
+        np.ndarray[double, ndim=1] nextAcceleration = np.empty(masses.size*2)
+        int i, j
 
     position[0] = initialPosition
     velocity[0] = initialVelocity
@@ -57,19 +43,13 @@ def cythonVerletAlgorithm(double[:] masses, double[:] initialPosition, double[:]
             currentAcceleration[i*2+d] = acceleration(i, masses, position[0])[d]
     
     for j in range(iterations - 1):
-        
-        for d in range(2):
-            for n in range(bodiesNumber):
-                position[j+1, n*2 + d] = position[j, n*2 + d] + velocity[j, n*2 + d] * deltaTime + 0.5 * currentAcceleration[n*2 + d] * deltaTime * deltaTime
+        position[j+1] = position[j] + velocity[j] * deltaTime + 0.5 * currentAcceleration * deltaTime * deltaTime
         
         for i in range(bodiesNumber):
             for d in range(2):
-                nextAcceleration[i*2+d] = acceleration(i, masses, position[j+1])[d]
-        
-        for d in range(2):
-            for n in range(bodiesNumber):
-                velocity[j+1, n*2 + d] = velocity[j, n*2 + d] + 0.5 * (currentAcceleration[n*2 + d] + nextAcceleration[n*2 + d]) * deltaTime
-                
+                nextAcceleration[i*2 + d] = acceleration(i, masses, position[j+1])[d]
+            
+        velocity[j+1] = velocity[j] + 0.5 * (currentAcceleration + nextAcceleration) * deltaTime
         currentAcceleration = nextAcceleration
 
     return position, velocity, times
