@@ -243,19 +243,24 @@ def openCLVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, i
 
 
 # Multiprocessing usage
-def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations): 
+def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations):
     if __name__ == '__main__':
-        with mp.Pool(5) as pool:
-            pool.starmap(verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
+        before = time.time()
+        pool = multiprocessing.Pool(mp.cpu_count())
+        result = pool.starmap(verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
+        after = time.time()
+        print (after-before)
+        
+#     if __name__ == '__main__':
+#         with mp.Pool(5) as pool:
+#             pool.starmap(verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
 #     global verlet
     
 #     def verlet(masses, initialPosition, initialVelocity, deltaTime, iterations):
 #         positions, velocities, times = verletAlgorythm(fucks, initialPosition, initialVelocity, deltaTime, iterations)
 #         return positions, velocities, times
 
-#     if __name__ == '__main__':
-#         pool = multiprocessing.Pool(masses.size)
-#         result = pool.map(verlet, ((masses, initialPosition, initialVelocity, deltaTime, iterations)))  
+ 
     
 
 # Multiprocessing usage
