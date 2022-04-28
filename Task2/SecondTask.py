@@ -6,6 +6,28 @@ import os
 import multiprocessing as mp
 import cyt
 from scipy.integrate import odeint
+import numpy as np
+import math
+
+import matplotlib.pyplot as plt
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from multiprocessing import Process, Queue
+
+import sys
+import time
+
+import pyopencl as cl
+import time
+import numpy as np
+import random as random
+import SecondTask as st
+import numpy as np
+import pyopencl as cl
+import matplotlib.pyplot as plt
+import os
+import multiprocessing as mp
+import cyt
+from scipy.integrate import odeint
 
 # a_i = d(v_i)/dt, where body has m_i, r_i, v_i
 def acceleration(body, masses, positions):
@@ -236,123 +258,81 @@ def openCLVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, i
 
     prg.verletAlgorithm(queue, (1,), None, massesBuffer, initialPositionBuffer, initialVelocityBuffer, deltaTimeBuffer, iterationsBuffer, positionBuffer, velocityBuffer, bodiesNumberBuffer, accelerationsBuffer, temporaryArrayBuffer)
     
-    cl.enqueue_copy(queue, positionBuffer, openCLPosition).wait()
-    cl.enqueue_copy(queue, velocityBuffer, openCLVelocity).wait()
+    cl.enqueue_copy(queue, openCLPosition, positionBuffer).wait()
+    cl.enqueue_copy(queue, openCLVelocity, velocityBuffer).wait()
     
     return openCLPosition, openCLVelocity, times
 
 
-# Multiprocessing usage
-def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations):
-    if __name__ == '__main__':
-        before = time.time()
-        pool = multiprocessing.Pool(mp.cpu_count())
-        result = pool.starmap(verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
-        after = time.time()
-        print (after-before)
+def accelerationForBody(body, masses, position):
+    gravitationConstant = 6.67408e-11
+    finalAcceleration = 0
+    
+    for j in range(masses.size):
+        if j != body:
+            distance = position[2*j:2*j+2]-position[2*body:2*body+2]
+            finalAcceleration += gravitationConstant * masses[j] * distance /  np.linalg.norm(distance, 2)**3
+
+    return finalAcceleration, body
+
+
+def nextPosition(previousPosition, previousVelocity, previousAcceleration, masses, deltaTime, body):
+    resultPosition = previousPosition[2*body:2*body+2] + previousVelocity[2*body:2*body+2] * deltaTime + 0.5 * previousAcceleration[2*body:2*body+2] * deltaTime**2
+    return resultPosition, body
+
+
+def nextVelocity(previousPosition, previousVelocity, previousAcceleration, masses, deltaTime, body):
+    nextAcceleration = accelerationForBody(body, masses, previousPosition)
+    resultVelocity = previousVelocity[2*body:2*body+2] + 0.5 * (nextAcceleration[0] + previousAcceleration[0]) * deltaTime    
+    return resultVelocity, nextAcceleration, body
+
+
+def MultiprocessingVerletAlgorythm(masses, initialPosition, initialVelocity, deltaTime, iterations):
+    times = np.arange(iterations) * deltaTime
+    
+    startTime = time.time()
+
+    initialAcceleration = np.zeros(2*masses.size)
+
+    with ProcessPoolExecutor(max_workers = mp.cpu_count()) as executor:
         
-#     if __name__ == '__main__':
-#         with mp.Pool(5) as pool:
-#             pool.starmap(verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
-#     global verlet
+        jobs = []
+        for i in range(masses.size):
+            jobs.append(executor.submit(accelerationForBody, body = i, masses = masses, position = initialPosition))       
+        for job in as_completed(jobs):
+            result_done = job.result()
+            i = result_done[1]
+            initialAcceleration[2*i:2*i+2] = result_done[0]
     
-#     def verlet(masses, initialPosition, initialVelocity, deltaTime, iterations):
-#         positions, velocities, times = verletAlgorythm(fucks, initialPosition, initialVelocity, deltaTime, iterations)
-#         return positions, velocities, times
-
- 
-    
-
-# Multiprocessing usage
-# def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations): 
-#     global verlet
-    
-#     def verlet(queue, resultQueue, initialVelocity, sharedMemoryPositions, body, events1, events2):
-        
-#         currentPosition = np.array(sharedMemoryPositions[body*2:(body+1)*2])
-#         currentAcceleration = accelerationWithoutNumpy(body, masses, sharedMemoryPositions)
-
-#         resultPosition = np.empty((iterations, 2))
-#         resultVelocity = np.empty((iterations, 2))
-        
-#         resultPosition[0, :] = currentPosition
-#         resultVelocity[0, :] = initialVelocity[body*2:(body+1)*2]
-    
-#         for j in range(iterations - 1):
-
-#             resultPosition[j+1, :] = currentPosition + resultVelocity[j, :] * deltaTime + 0.5 * currentAcceleration * deltaTime**2
-
-#             queue.put([body, resultPosition[j+1, :]])
+        for t in range(iterations-1):
             
-#             events1[body].set()
-
-#             if body == 0:
-#                 for i in range(masses.size):
-#                     events1[i].wait()
-#                     events1[i].clear()
-                    
-#                 for i in range(masses.size):
-#                     gettingFromQueue = queue.get()
-#                     sharedMemoryPositions[gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[1]
-                    
-#                 for i in range(masses.size):
-#                     events2[i].set()
-#             else:
-#                 events2[body].wait()
-#                 events2[body].clear()
-
-#             currentPosition = np.array(sharedMemoryPositions[body*2:(body + 1)*2])
+            jobs = []
+            for i in range(masses.size):
+                jobs.append(executor.submit(nextPosition, previousPosition = initialPosition, previousVelocity = initialVelocity, previousAcceleration = initialAcceleration, masses = masses, deltaTime = deltaTime, body = i))            
+            for job in as_completed(jobs):
+                result_done = job.result()
+                i = result_done[1]
+                initialPosition[2*i:2*i+2] = result_done[0]
             
-#             nextAcceleration = accelerationWithoutNumpy(body, masses, sharedMemoryPositions)
+            jobs = []
+            for i in range(masses.size):
+                jobs.append(executor.submit(nextVelocity, previousPosition = initialPosition, previousVelocity = initialVelocity, previousAcceleration = initialAcceleration, masses = masses, deltaTime = deltaTime, body = i ))            
+            for job in as_completed(jobs):
+                result_done = job.result()
+                i = result_done[2]
+                initialVelocity[2*i:2*i+2] = result_done[0]
+                initialAcceleration[2*i:2*i+2] = result_done[1][0]
 
-#             resultVelocity[j+1, :] = resultVelocity[j, :] + 0.5 * (currentAcceleration + nextAcceleration) * deltaTime
-            
-#             currentAcceleration = nextAcceleration
-            
-#         resultQueue.put([body, resultPosition, resultVelocity])
 
-    
-#     if __name__ == '__main__':
-#         times = np.arange(iterations) * deltaTime
-        
-#         events1 = []
-#         events2 = []
-#         processes = []
-        
-#         positions = np.zeros((times.size, 2*masses.size))
-#         velocities = np.zeros((times.size, 2*masses.size))
-        
-#         sharedMemoryPositions = mp.Array('d', initialPosition)
-
-#         for body in masses:
-#             events1.append(mp.Event())
-#             events2.append(mp.Event())
-#             events1[-1].clear()
-#             events2[-1].clear()
-
-#         queue = mp.Queue()
-#         resultQueue = mp.Queue()
-        
-#         for body in range(masses.size):
-#             processes.append(mp.Process(target=verlet, args=(queue, resultQueue, initialVelocity, sharedMemoryPositions, body, events1, events2)))
-#             processes[-1].start()
-
-#         for i in range(masses.size):
-#             gettingFromQueue = resultQueue.get()
-#             positions[:, gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[1]
-#             velocities[:, gettingFromQueue[0]*2:(gettingFromQueue[0]+1)*2] = gettingFromQueue[2]
-
-#         for process in processes:
-#             process.join()
-
-#         return positions, velocities, times
+    endTime = time.time()
+    return initialPosition, initialVelocity, times, endTime - startTime
 
 
 def VerletAlgorithmMethods(method, masses, initialPosition, initialVelocity, deltaTime, iterations):
     
     methods = {0: odeintVerletAlgorythm,
                1: verletAlgorythm,
-               2: MultiprocessingVerletAlgorithm,
+               2: MultiprocessingVerletAlgorythm,
                3: cyt.cythonVerletAlgorithm,
                4: openCLVerletAlgorithm}
     

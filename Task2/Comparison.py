@@ -20,17 +20,17 @@ from scipy.integrate import odeint
 # In[44]:
 
 
-def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations):
-    if __name__ == '__main__':
-        pool = mp.Pool(mp.cpu_count())
-        before = time.time()
-        result = pool.starmap(st.verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
-        after = time.time()
-        print (after-before)
+# def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations):
+#     if __name__ == '__main__':
+#         pool = mp.Pool(mp.cpu_count())
+#         before = time.time()
+#         result = pool.starmap(st.verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
+#         after = time.time()
+#         print (after-before)
 
 
 def timeToSolve(method, launchesNumber, masses, initialPosition, initialVelocity, deltaTime, iterations):
-    if (method != 2):
+     if (method != 2):
         t = 0
             
         for i in range(launchesNumber):
@@ -80,22 +80,25 @@ def particlesGeneration(n, dx=1e12):
     return np.array(mass), np.array(position), np.array(velocity), 10 * abs((max(position) - min(position)) / max(velocity))
 
 
-# In[46]:
-
-
 def main():
-    m, p, v, t = particlesGeneration(50)
-    #print(timeToSolve(1, 3, m, p, v, t / 50, 50))
-    #print(timeToSolve(3, 3, m, p, v, t / 50, 50))
-    #print(timeToSolve(4, 3, m, p, v, t / 50, 50))
-    
-    #MultiprocessingVerletAlgorithm(m, p, v, t / 50, 50)
-    #MultiprocessingVerletAlgorithm(m, p, v, t / 50, 50)
-    #MultiprocessingVerletAlgorithm(m, p, v, t / 50, 50)
+    m, p, v, t = particlesGeneration(200)
+    print(timeToSolve(1, 3, m, p, v, t / 100, 100))
+    print(timeToSolve(3, 3, m, p, v, t / 100, 100))
+    print(timeToSolve(4, 3, m, p, v, t / 100, 100))
 
-    
 
 main()
+  
+    
+# if __name__ == '__main__':
+#     m, p, v, t = particlesGeneration(200)
+#     print(st.MultiprocessingVerletAlgorythm(m, p, v, t / 100, 100)[3])
+#     print(st.MultiprocessingVerletAlgorythm(m, p, v, t / 100, 100)[3])
+#     print(st.MultiprocessingVerletAlgorythm(m, p, v, t / 100, 100)[3])
+
+    
+
+
 
 
 
