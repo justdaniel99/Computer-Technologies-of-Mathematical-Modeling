@@ -5,57 +5,63 @@ import matplotlib.pyplot as plt
 import os
 import multiprocessing as mp
 import cyt
-from scipy.integrate import odeint
 import numpy as np
 import math
-
 import matplotlib.pyplot as plt
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-from multiprocessing import Process, Queue
-
 import sys
 import time
-
-import pyopencl as cl
-import time
-import numpy as np
 import random as random
 import SecondTask as st
-import numpy as np
-import pyopencl as cl
-import matplotlib.pyplot as plt
-import os
-import multiprocessing as mp
-import cyt
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from multiprocessing import Process, Queue
 from scipy.integrate import odeint
+
 
 # a_i = d(v_i)/dt, where body has m_i, r_i, v_i
 def acceleration(body, masses, positions):
     gravitationConstant = 6.67408e-11
     finalAcceleration = 0
+    sunPosition = np.zeros((positions.shape[0], 2))
     
     for j in range(masses.size):
         if body != j:
             distance = positions[:, 2*j:2*j+2] - positions[:, 2*body:2*body+2] # r_j - r_i
             finalAcceleration += gravitationConstant * masses[j] * distance / np.linalg.norm(distance, 2)**3
+    distance = sunPosition - positions[:, 2*body:2*body+2]
+    finalAcceleration += gravitationConstant * 1.9 * pow(10, 30) * distance / np.linalg.norm(distance, 2) ** 3
     
     return finalAcceleration
 
 
-# The same function as above, but without numpy operations with arrays
-def accelerationWithoutNumpy(body, masses, positions):
+def accelerationWithoutTime(body, masses, positions):
     gravitationConstant = 6.67408e-11
-    finalAcceleration = 0
-    
-    distance = np.zeros(2)
+    finalAcceleration = 0    
+    sunPosition = np.array([0.0, 0.0])
     
     for j in range(masses.size):
         if body != j:
-            for d in range(2):
-                distance[d] = positions[2*j+d] - positions[2*body+d] # r_j - r_i
-                finalAcceleration += gravitationConstant * masses[j] * distance / np.linalg.norm(distance, 2)**3
+            distance = positions[2*j:2*j+2] - positions[2*body:2*body+2] # r_j - r_i
+            finalAcceleration += gravitationConstant * masses[j] * distance / np.linalg.norm(distance, 2)**3
+    distance = sunPosition - positions[2*body:2*body+2]
+    finalAcceleration += gravitationConstant * 1.9 * pow(10, 30) * distance / np.linalg.norm(distance, 2) ** 3
     
     return finalAcceleration
+
+
+# # The same function as above, but without numpy operations with arrays
+# def accelerationWithoutNumpy(body, masses, positions):
+#     gravitationConstant = 6.67408e-11
+#     finalAcceleration = 0
+    
+#     distance = np.zeros(2)
+    
+#     for j in range(masses.size):
+#         if body != j:
+#             for d in range(2):
+#                 distance[d] = positions[2*j+d] - positions[2*body+d] # r_j - r_i
+#                 finalAcceleration += gravitationConstant * masses[j] * distance / np.linalg.norm(distance, 2)**3
+    
+#     return finalAcceleration
 
 
 # In[2]:
@@ -90,33 +96,28 @@ def verletAlgorythm(masses, initialPosition, initialVelocity, deltaTime, iterati
 # In[3]:
 
 
+
 # odeint usage
 def odeintVerletAlgorythm(masses, initialPosition, initialVelocity, deltaTime, iterations):
     times = np.arange(iterations) * deltaTime
-        
-    def problemPosition(v, t):
-        res = np.zeros(v.size)
-        for i in range(v.size):
-            res[i] = v[i]
+    
+    def system(posvel, t):
+        res = np.zeros(posvel.shape)
+        mid_idx = posvel.size // 2
+        pos = posvel[:mid_idx]
+        vel = posvel[mid_idx:]
+        for i in range(masses.size):
+            res[mid_idx+2*i:mid_idx+2*i+2] = accelerationWithoutTime(i, masses, pos)
+        res[:mid_idx] = vel
         return res
     
-    def problemVelocity(x, t):
-        res = np.zeros(x.size)
-        
-        positions = np.zeros((times.size, x.size))
-        positions[0] = x
-        
-        for i in range(x.size//2):
-            res[2*i:2*i+2] = acceleration(i, masses, positions)[i]
-        return res
-
-    positions = odeint(problemPosition, initialPosition, times)
-    velocities = odeint(problemVelocity, initialVelocity, times)
+    resultposvel = odeint(system, np.ndarray.flatten(np.concatenate((initialPosition, initialVelocity))), times)
+    positions = resultposvel[:, :masses.size*2]
+    velocities = resultposvel[:, masses.size*2:]
     
     return positions, velocities, times
-
-
-# In[4]:
+        
+        
 
 
 # OpenCL usage
@@ -338,32 +339,6 @@ def VerletAlgorithmMethods(method, masses, initialPosition, initialVelocity, del
     
     return methods[method](masses, initialPosition, initialVelocity, deltaTime, iterations)
 
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
 
 
 

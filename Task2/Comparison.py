@@ -19,16 +19,6 @@ from scipy.integrate import odeint
 
 # In[44]:
 
-
-# def MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations):
-#     if __name__ == '__main__':
-#         pool = mp.Pool(mp.cpu_count())
-#         before = time.time()
-#         result = pool.starmap(st.verletAlgorythm, [(masses, initialPosition, initialVelocity, deltaTime, iterations)])
-#         after = time.time()
-#         print (after-before)
-
-
 def timeToSolve(method, launchesNumber, masses, initialPosition, initialVelocity, deltaTime, iterations):
      if (method != 2):
         t = 0
@@ -39,9 +29,6 @@ def timeToSolve(method, launchesNumber, masses, initialPosition, initialVelocity
             t += time.time() - startTime
         
         return t / launchesNumber
-#     else:
-#         for i in range(launchesNumber):
-#             MultiprocessingVerletAlgorithm(masses, initialPosition, initialVelocity, deltaTime, iterations)
 
 
 # In[45]:
@@ -80,14 +67,29 @@ def particlesGeneration(n, dx=1e12):
     return np.array(mass), np.array(position), np.array(velocity), 10 * abs((max(position) - min(position)) / max(velocity))
 
 
-def main():
-    m, p, v, t = particlesGeneration(200)
-    print(timeToSolve(1, 3, m, p, v, t / 100, 100))
-    print(timeToSolve(3, 3, m, p, v, t / 100, 100))
-    print(timeToSolve(4, 3, m, p, v, t / 100, 100))
+def accuracy(method, masses, initialPosition, initialVelocity, deltaTime, iterations):
+    idealPosition, idealVelocity, time = st.VerletAlgorithmMethods(0, masses, initialPosition, initialVelocity, deltaTime, iterations)
+    actualPosition, actualVelocity, time = st.VerletAlgorithmMethods(method, masses, initialPosition, initialVelocity, deltaTime, iterations)
+
+    return np.amax(np.abs(idealPosition - actualPosition)), np.amax(np.abs(idealVelocity - actualVelocity))
 
 
-main()
+# def main():
+#     m, p, v, t = particlesGeneration(200)
+#     print(timeToSolve(1, 3, m, p, v, t / 100, 100))
+#     print(timeToSolve(3, 3, m, p, v, t / 100, 100))
+#     print(timeToSolve(4, 3, m, p, v, t / 100, 100))
+
+
+# main()
+
+m, p, v, t = particlesGeneration(8)
+print(type(m))
+print(type(p))
+print(type(v))
+print(type(t))
+print(accuracy(3, m, p, v, 10, 10))
+# #print(st.odeintVerletAlgorythm(m, p, v, 5, 5))
   
     
 # if __name__ == '__main__':
